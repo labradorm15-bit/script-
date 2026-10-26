@@ -1,296 +1,489 @@
 
--- PEEP | Liquid Glass UI
--- Place in StarterPlayer > StarterPlayerScripts
--- Roblox Studio LocalScript
+-- PEEP | Liquid Chrome Interface
+-- Roblox Studio > StarterPlayer > StarterPlayerScripts
+-- Insert as a LocalScript. No key system.
+-- Combat/ESP entries are UI prototypes, not cheat implementations.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local UIS = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local pg = player:WaitForChild("PlayerGui")
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "PEEP_LiquidGlass"
-gui.ResetOnSpawn = false
-gui.Parent = playerGui
+local old = pg:FindFirstChild("PEEP")
+if old then old:Destroy() end
 
-local function new(class, props, parent)
+local C = {
+    bg = Color3.fromRGB(5, 6, 8),
+    panel = Color3.fromRGB(13, 15, 19),
+    row = Color3.fromRGB(23, 25, 30),
+    silver = Color3.fromRGB(225, 230, 239),
+    muted = Color3.fromRGB(135, 143, 157),
+    accent = Color3.fromRGB(190, 205, 224),
+    track = Color3.fromRGB(48, 52, 61),
+}
+
+local state = {}
+local callbacks = {}
+
+local function make(class, props, parent)
     local obj = Instance.new(class)
-    for k, v in pairs(props) do
-        obj[k] = v
-    end
+    for k, v in pairs(props) do obj[k] = v end
     obj.Parent = parent
     return obj
 end
 
-local function corner(parent, radius)
-    new("UICorner", {
+local function round(obj, radius)
+    make("UICorner", {
         CornerRadius = UDim.new(0, radius)
-    }, parent)
+    }, obj)
 end
 
-local function stroke(parent, color, transparency)
-    return new("UIStroke", {
-        Color = color,
+local function outline(obj, transparency)
+    return make("UIStroke", {
+        Color = C.accent,
         Thickness = 1,
-        Transparency = transparency or 0.25
+        Transparency = transparency or 0.65
+    }, obj)
+end
+
+local function label(parent, text, size, position, font, color)
+    return make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = text,
+        TextColor3 = color or C.silver,
+        TextSize = size,
+        Font = font or Enum.Font.Gotham,
+        Position = position,
+        Size = UDim2.new(1, 0, 0, size + 10),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd
     }, parent)
 end
 
-local silver = Color3.fromRGB(220, 225, 235)
-local muted = Color3.fromRGB(135, 142, 155)
-local black = Color3.fromRGB(8, 9, 12)
-local glass = Color3.fromRGB(20, 22, 28)
-local accent = Color3.fromRGB(190, 205, 225)
+local gui = make("ScreenGui", {
+    Name = "PEEP",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    DisplayOrder = 20
+}, pg)
 
--- Main window
-local main = new("Frame", {
-    Name = "Main",
-    Size = UDim2.fromOffset(430, 480),
-    Position = UDim2.new(0.5, -215, 0.5, -240),
-    BackgroundColor3 = black,
-    BackgroundTransparency = 0.08,
-    BorderSizePixel = 0
+local main = make("Frame", {
+    Name = "Window",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.new(0.94, 0, 0.82, 0),
+    BackgroundColor3 = C.bg,
+    BorderSizePixel = 0,
+    ClipsDescendants = true
 }, gui)
+round(main, 15)
+outline(main, 0.35)
 
-corner(main, 18)
-stroke(main, silver, 0.35)
+make("UISizeConstraint", {
+    MinSize = Vector2.new(300, 340),
+    MaxSize = Vector2.new(1120, 760)
+}, main)
 
-new("UIGradient", {
+make("UIGradient", {
+    Rotation = 130,
     Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 38, 47)),
-        ColorSequenceKeypoint.new(0.45, black),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(24, 27, 34))
-    }),
-    Rotation = 135
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 33, 40)),
+        ColorSequenceKeypoint.new(0.5, C.bg),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(17, 19, 24))
+    })
 }, main)
 
--- Glass highlight
-local highlight = new("Frame", {
-    Name = "GlassHighlight",
-    Position = UDim2.new(0, 1, 0, 1),
-    Size = UDim2.new(1, -2, 0, 105),
-    BackgroundColor3 = silver,
-    BackgroundTransparency = 0.94,
-    BorderSizePixel = 0
-}, main)
-corner(highlight, 17)
-
--- Draggable title bar
-local top = new("Frame", {
-    Size = UDim2.new(1, 0, 0, 95),
+-- Header
+local header = make("Frame", {
+    Name = "Header",
+    Size = UDim2.new(1, 0, 0, 74),
     BackgroundTransparency = 1,
     Active = true
 }, main)
 
-new("TextLabel", {
-    Position = UDim2.fromOffset(22, 9),
-    Size = UDim2.new(1, -65, 0, 52),
-    BackgroundTransparency = 1,
-    Text = "P E E P",
-    TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 35,
-    Font = Enum.Font.GothamBlack,
-    TextXAlignment = Enum.TextXAlignment.Left
-}, top)
+local logo = label(header, "P E E P", 29,
+    UDim2.fromOffset(18, 5), Enum.Font.GothamBlack)
+logo.Size = UDim2.new(0.65, 0, 0, 40)
 
-new("TextLabel", {
-    Position = UDim2.fromOffset(24, 56),
-    Size = UDim2.new(1, -48, 0, 20),
-    BackgroundTransparency = 1,
-    Text = "LIQUID GLASS  /  CONTROL PANEL",
-    TextColor3 = muted,
-    TextSize = 10,
-    Font = Enum.Font.Code,
-    TextXAlignment = Enum.TextXAlignment.Left
-}, top)
+local subtitle = label(header, "LIQUID CHROME  /  CONTROL CENTER", 9,
+    UDim2.fromOffset(21, 44), Enum.Font.Code, C.muted)
+subtitle.Size = UDim2.new(0.8, 0, 0, 16)
 
-local close = new("TextButton", {
-    Size = UDim2.fromOffset(32, 32),
-    Position = UDim2.new(1, -45, 0, 18),
+local close = make("TextButton", {
+    Position = UDim2.new(1, -42, 0, 14),
+    Size = UDim2.fromOffset(29, 29),
     Text = "×",
-    TextSize = 24,
+    TextSize = 22,
     Font = Enum.Font.GothamLight,
-    TextColor3 = silver,
-    BackgroundColor3 = glass,
-    BackgroundTransparency = 0.15,
+    TextColor3 = C.silver,
+    BackgroundColor3 = C.row,
     BorderSizePixel = 0
-}, top)
-corner(close, 10)
-stroke(close, silver, 0.65)
-close.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
+}, header)
+round(close, 9)
+close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
-local dragging = false
-local dragStart, startPosition
-
-top.InputBegan:Connect(function(input)
+-- Drag window
+local dragging, dragStart, originalPos
+header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
-        startPosition = main.Position
+        originalPos = main.Position
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    ) then
-        local delta = input.Position - dragStart
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStart
         main.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
+            originalPos.X.Scale, originalPos.X.Offset + d.X,
+            originalPos.Y.Scale, originalPos.Y.Offset + d.Y
         )
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
+UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
 
--- Scrollable settings
-local scroll = new("ScrollingFrame", {
-    Position = UDim2.fromOffset(16, 105),
-    Size = UDim2.new(1, -32, 1, -123),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = muted,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y
+-- Tabs
+local tabs = make("Frame", {
+    Position = UDim2.fromOffset(12, 77),
+    Size = UDim2.new(1, -24, 0, 38),
+    BackgroundTransparency = 1
 }, main)
 
-new("UIListLayout", {
-    Padding = UDim.new(0, 10),
-    SortOrder = Enum.SortOrder.LayoutOrder
-}, scroll)
+make("UIListLayout", {
+    FillDirection = Enum.FillDirection.Horizontal,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6)
+}, tabs)
 
-local function section(title, order)
-    return new("TextLabel", {
-        Size = UDim2.new(1, -4, 0, 24),
-        BackgroundTransparency = 1,
-        Text = "  " .. title,
-        TextColor3 = muted,
-        TextSize = 11,
-        Font = Enum.Font.Code,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        LayoutOrder = order
-    }, scroll)
+local body = make("Frame", {
+    Position = UDim2.fromOffset(12, 122),
+    Size = UDim2.new(1, -24, 1, -134),
+    BackgroundTransparency = 1
+}, main)
+
+local pages = {}
+local tabButtons = {}
+local activeTab = "AIMBOT"
+
+local function selectTab(name)
+    activeTab = name
+    for key, page in pairs(pages) do
+        page.Visible = key == name
+    end
+    for key, button in pairs(tabButtons) do
+        local selected = key == name
+        button.TextColor3 = selected and C.silver or C.muted
+        button.BackgroundColor3 = selected and C.row or C.bg
+        button.TextTransparency = selected and 0 or 0.15
+    end
 end
 
-local settings = {}
-
-local function toggle(title, description, order, callback)
-    local card = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 59),
-        BackgroundColor3 = glass,
-        BackgroundTransparency = 0.18,
-        BorderSizePixel = 0,
-        LayoutOrder = order
-    }, scroll)
-    corner(card, 12)
-    stroke(card, silver, 0.78)
-
-    new("TextLabel", {
-        Position = UDim2.fromOffset(13, 8),
-        Size = UDim2.new(1, -90, 0, 22),
-        BackgroundTransparency = 1,
-        Text = title,
-        TextColor3 = silver,
-        TextSize = 13,
-        Font = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left
-    }, card)
-
-    new("TextLabel", {
-        Position = UDim2.fromOffset(13, 30),
-        Size = UDim2.new(1, -90, 0, 17),
-        BackgroundTransparency = 1,
-        Text = description,
-        TextColor3 = muted,
-        TextSize = 10,
-        Font = Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left
-    }, card)
-
-    local button = new("TextButton", {
-        Position = UDim2.new(1, -62, 0.5, -12),
-        Size = UDim2.fromOffset(48, 24),
-        Text = "",
-        BackgroundColor3 = Color3.fromRGB(54, 57, 65),
+local function createPage(name, index)
+    local button = make("TextButton", {
+        Name = name .. "Tab",
+        LayoutOrder = index,
+        Size = UDim2.new(1/3, -5, 1, 0),
+        BackgroundColor3 = C.bg,
+        Text = name,
+        TextColor3 = C.muted,
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
         BorderSizePixel = 0,
         AutoButtonColor = false
-    }, card)
-    corner(button, 12)
+    }, tabs)
+    round(button, 8)
+    tabButtons[name] = button
 
-    local knob = new("Frame", {
-        Position = UDim2.fromOffset(3, 3),
-        Size = UDim2.fromOffset(18, 18),
-        BackgroundColor3 = silver,
-        BorderSizePixel = 0
-    }, button)
-    corner(knob, 9)
+    local page = make("ScrollingFrame", {
+        Name = name .. "Page",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.muted,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Visible = false
+    }, body)
 
-    local enabled = false
-    settings[title] = false
+    make("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder
+    }, page)
 
+    make("UIPadding", {
+        PaddingBottom = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 4)
+    }, page)
+
+    pages[name] = page
     button.MouseButton1Click:Connect(function()
-        enabled = not enabled
-        settings[title] = enabled
-
-        TweenService:Create(button, TweenInfo.new(0.18), {
-            BackgroundColor3 = enabled
-                and Color3.fromRGB(175, 190, 210)
-                or Color3.fromRGB(54, 57, 65)
-        }):Play()
-
-        TweenService:Create(knob, TweenInfo.new(0.18), {
-            Position = enabled
-                and UDim2.fromOffset(27, 3)
-                or UDim2.fromOffset(3, 3),
-            BackgroundColor3 = enabled and black or silver
-        }):Play()
-
-        if callback then
-            callback(enabled)
-        end
+        selectTab(name)
     end)
+    return page
 end
 
-section("01  /  AIM LAB", 1)
-toggle("Aim Assist", "Prototype setting", 2)
-toggle("Silent Aim", "Integration placeholder", 3)
-toggle("Aim FOV", "Display and targeting settings", 4)
+local function section(page, text)
+    local holder = make("Frame", {
+        Size = UDim2.new(1, -4, 0, 25),
+        BackgroundTransparency = 1
+    }, page)
+    label(holder, "◈  " .. text, 10, UDim2.fromOffset(3, 3),
+        Enum.Font.GothamBold, C.muted)
+end
 
-section("02  /  TRIGGER LAB", 5)
-toggle("Trigger Bot", "Authorized game mechanic only", 6)
-toggle("Target Highlight", "Visual feedback", 7)
+local function card(page, height)
+    local f = make("Frame", {
+        Size = UDim2.new(1, -4, 0, height or 48),
+        BackgroundColor3 = C.row,
+        BackgroundTransparency = 0.12,
+        BorderSizePixel = 0
+    }, page)
+    round(f, 10)
+    return f
+end
 
-section("03  /  VISUALS", 8)
-toggle("Glass Effects", "Gloss and transparency options", 9)
-toggle("Performance Mode", "Reduced visual effects", 10)
+local function toggle(page, name, description)
+    local f = card(page, description and 57 or 44)
+    label(f, name, 12, UDim2.fromOffset(12, 4),
+        Enum.Font.GothamMedium).Size = UDim2.new(1, -90, 0, 23)
 
-section("04  /  SYSTEM", 11)
-toggle("Show Notifications", "UI status feedback", 12)
+    if description then
+        local d = label(f, description, 9,
+            UDim2.fromOffset(12, 29), Enum.Font.Gotham, C.muted)
+        d.Size = UDim2.new(1, -85, 0, 15)
+    end
 
--- Entrance animation
-main.BackgroundTransparency = 1
-main.Size = UDim2.fromOffset(400, 450)
+    local switch = make("TextButton", {
+        Position = UDim2.new(1, -57, 0.5, -11),
+        Size = UDim2.fromOffset(43, 22),
+        BackgroundColor3 = C.track,
+        Text = "",
+        BorderSizePixel = 0,
+        AutoButtonColor = false
+    }, f)
+    round(switch, 12)
 
-TweenService:Create(main, TweenInfo.new(
-    0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out
-), {
-    BackgroundTransparency = 0.08,
-    Size = UDim2.fromOffset(430, 480)
-}):Play()
+    local dot = make("Frame", {
+        Position = UDim2.fromOffset(3, 3),
+        Size = UDim2.fromOffset(16, 16),
+        BackgroundColor3 = C.silver,
+        BorderSizePixel = 0
+    }, switch)
+    round(dot, 10)
 
-print("PEEP Liquid Glass UI loaded.")
+    state[name] = false
+    switch.MouseButton1Click:Connect(function()
+        state[name] = not state[name]
+        local enabled = state[name]
+        TweenService:Create(switch, TweenInfo.new(0.16), {
+            BackgroundColor3 = enabled and C.accent or C.track
+        }):Play()
+        TweenService:Create(dot, TweenInfo.new(0.16), {
+            Position = enabled and UDim2.new(1, -19, 0, 3)
+                or UDim2.fromOffset(3, 3),
+            BackgroundColor3 = enabled and C.bg or C.silver
+        }):Play()
+        if callbacks[name] then callbacks[name](enabled) end
+    end)
+    return f
+end
+
+local function slider(page, name, min, max, default)
+    local f = card(page, 65)
+    label(f, name, 11, UDim2.fromOffset(12, 5),
+        Enum.Font.GothamMedium).Size = UDim2.new(0.72, 0, 0, 20)
+
+    local value = make("TextLabel", {
+        Position = UDim2.new(0.70, 0, 0, 5),
+        Size = UDim2.new(0.27, -8, 0, 20),
+        BackgroundTransparency = 1,
+        TextColor3 = C.silver,
+        Text = tostring(default),
+        TextSize = 11,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Right
+    }, f)
+
+    local track = make("TextButton", {
+        Position = UDim2.new(0, 12, 0, 39),
+        Size = UDim2.new(1, -24, 0, 7),
+        BackgroundColor3 = C.track,
+        Text = "",
+        BorderSizePixel = 0,
+        AutoButtonColor = false
+    }, f)
+    round(track, 5)
+
+    local ratio = math.clamp((default-min)/(max-min), 0, 1)
+    local fill = make("Frame", {
+        Size = UDim2.new(ratio, 0, 1, 0),
+        BackgroundColor3 = C.accent,
+        BorderSizePixel = 0
+    }, track)
+    round(fill, 5)
+
+    local knob = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(ratio, 0, 0.5, 0),
+        Size = UDim2.fromOffset(13, 13),
+        BackgroundColor3 = C.silver,
+        BorderSizePixel = 0
+    }, track)
+    round(knob, 10)
+
+    local function update(x)
+        local r = math.clamp(
+            (x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local v = math.floor(min + (max-min)*r + 0.5)
+        fill.Size = UDim2.new(r, 0, 1, 0)
+        knob.Position = UDim2.new(r, 0, 0.5, 0)
+        value.Text = tostring(v)
+        state[name] = v
+        if callbacks[name] then callbacks[name](v) end
+    end
+
+    state[name] = default
+    track.MouseButton1Down:Connect(function()
+        update(UIS:GetMouseLocation().X)
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+            and track:IsDescendantOf(gui) then
+            -- Slider is updated while dragging over its own track.
+            local p = UIS:GetMouseLocation()
+            if p.X >= track.AbsolutePosition.X - 4
+                and p.X <= track.AbsolutePosition.X + track.AbsoluteSize.X + 4
+                and p.Y >= track.AbsolutePosition.Y - 16
+                and p.Y <= track.AbsolutePosition.Y + track.AbsoluteSize.Y + 16 then
+                update(p.X)
+            end
+        end
+    end)
+    return f
+end
+
+local function dropdown(page, name, options, default)
+    local f = card(page, 49)
+    label(f, name, 11, UDim2.fromOffset(12, 12),
+        Enum.Font.GothamMedium).Size = UDim2.new(0.45, 0, 0, 22)
+
+    local index = table.find(options, default) or 1
+    local b = make("TextButton", {
+        Position = UDim2.new(0.48, 0, 0, 8),
+        Size = UDim2.new(0.48, -8, 0, 32),
+        BackgroundColor3 = C.bg,
+        Text = options[index] .. "  ▾",
+        TextColor3 = C.silver,
+        TextSize = 10,
+        Font = Enum.Font.Gotham,
+        BorderSizePixel = 0
+    }, f)
+    round(b, 8)
+    state[name] = options[index]
+    b.MouseButton1Click:Connect(function()
+        index = index % #options + 1
+        state[name] = options[index]
+        b.Text = options[index] .. "  ▾"
+        if callbacks[name] then callbacks[name](state[name]) end
+    end)
+    return f
+end
+
+-- AIMBOT
+local aim = createPage("AIMBOT", 1)
+section(aim, "AIMBOT")
+toggle(aim, "Silent Aim", "UI placeholder")
+toggle(aim, "Triggerbot", "UI placeholder")
+dropdown(aim, "Hitbox", {"Head", "Torso", "HumanoidRootPart"}, "Head")
+slider(aim, "Max Distance", 50, 1000, 1000)
+toggle(aim, "Skip ADS", "UI placeholder")
+toggle(aim, "Skip Roll", "UI placeholder")
+section(aim, "FIELD OF VIEW")
+toggle(aim, "Show FOV", "Display setting")
+slider(aim, "FOV Size", 50, 800, 400)
+section(aim, "TARGETING")
+toggle(aim, "Team Check", "Display setting")
+
+-- VISUALS
+local visuals = createPage("VISUALS", 2)
+section(visuals, "PLAYER ESP")
+toggle(visuals, "Highlight ESP", "UI placeholder")
+toggle(visuals, "Box ESP", "UI placeholder")
+toggle(visuals, "Corner Box", "UI placeholder")
+toggle(visuals, "Skeleton ESP", "UI placeholder")
+toggle(visuals, "Name Tags", "UI placeholder")
+toggle(visuals, "Health Bar (Side)", "UI placeholder")
+toggle(visuals, "Distance", "UI placeholder")
+toggle(visuals, "Head Dot", "UI placeholder")
+toggle(visuals, "Tracers", "UI placeholder")
+slider(visuals, "Max ESP Distance", 50, 1000, 500)
+
+-- EXPLOITS & INTERFACE
+local exploits = createPage("EXPLOITS", 3)
+section(exploits, "WEAPON SETTINGS")
+toggle(exploits, "Rapid Fire", "UI placeholder")
+slider(exploits, "Rate Of Fire", 1, 100, 10)
+toggle(exploits, "Damage Changer", "UI placeholder")
+slider(exploits, "Damage Value", 1, 100, 25)
+section(exploits, "INTERFACE")
+slider(exploits, "UI Scale", 70, 120, 100)
+
+callbacks["UI Scale"] = function(v)
+    main.Size = UDim2.new(0.94, 0, 0.82, 0)
+    local constraint = main:FindFirstChildOfClass("UISizeConstraint")
+    if constraint then
+        constraint.MaxSize = Vector2.new(1120 * v / 100, 760 * v / 100)
+    end
+end
+
+selectTab("AIMBOT")
+
+-- Mobile-friendly open/close button
+local reopen = make("TextButton", {
+    Name = "OpenPEEP",
+    AnchorPoint = Vector2.new(0, 0.5),
+    Position = UDim2.new(0, 8, 0.5, 0),
+    Size = UDim2.fromOffset(44, 44),
+    BackgroundColor3 = C.panel,
+    Text = "P",
+    TextColor3 = C.silver,
+    TextSize = 20,
+    Font = Enum.Font.GothamBlack,
+    BorderSizePixel = 0,
+    Visible = false
+}, gui)
+round(reopen, 13)
+outline(reopen, 0.35)
+
+close.MouseButton1Click:Connect(function()
+    -- Window close button destroys the interface.
+end)
+
+-- Press RightShift to hide/show the menu.
+UIS.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        main.Visible = not main.Visible
+        reopen.Visible = not main.Visible
+    end
+end)
+
+reopen.MouseButton1Click:Connect(function()
+    main.Visible = true
+    reopen.Visible = false
+end)
+
+print("PEEP loaded | Keyless UI")
