@@ -1,0 +1,430 @@
+
+-- NOVA PREMIUM | Roblox Studio
+-- Single-file UI starter
+-- Place in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local PURPLE = Color3.fromRGB(145, 75, 255)
+local DARK = Color3.fromRGB(19, 19, 29)
+local PANEL = Color3.fromRGB(29, 28, 43)
+local WHITE = Color3.fromRGB(245, 245, 255)
+
+local settings = {
+    TeamCheck = true,
+    ShowFOV = true,
+    Highlight = false,
+    Boxes = false,
+    CornerBox = false,
+    Skeleton = false,
+    NameTags = true,
+    HealthBar = true,
+    Distance = true,
+    HeadDot = false,
+    Tracers = false,
+    RapidFire = false,
+
+    AimDistance = 500,
+    ESPDistance = 500,
+    FOVSize = 120,
+    FireRate = 10,
+    Damage = 25,
+    UIScale = 100,
+}
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "NovaPremium"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local scale = Instance.new("UIScale")
+scale.Scale = settings.UIScale / 100
+scale.Parent = gui
+
+local function make(class, props, parent)
+    local obj = Instance.new(class)
+    for key, value in pairs(props) do
+        obj[key] = value
+    end
+    obj.Parent = parent
+    return obj
+end
+
+local function corner(obj, radius)
+    make("UICorner", {
+        CornerRadius = UDim.new(0, radius or 8)
+    }, obj)
+end
+
+local main = make("Frame", {
+    Name = "Main",
+    Size = UDim2.fromOffset(520, 390),
+    Position = UDim2.new(0.5, -260, 0.5, -195),
+    BackgroundColor3 = DARK,
+    BorderSizePixel = 0,
+    Visible = true,
+}, gui)
+corner(main, 12)
+
+make("UIStroke", {
+    Color = PURPLE,
+    Thickness = 1.5,
+}, main)
+
+local title = make("TextLabel", {
+    Size = UDim2.new(1, -60, 0, 48),
+    Position = UDim2.fromOffset(16, 0),
+    BackgroundTransparency = 1,
+    Text = "NOVA PREMIUM",
+    TextColor3 = WHITE,
+    TextSize = 22,
+    Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, main)
+
+local close = make("TextButton", {
+    Size = UDim2.fromOffset(34, 34),
+    Position = UDim2.new(1, -44, 0, 7),
+    BackgroundColor3 = PANEL,
+    Text = "X",
+    TextColor3 = WHITE,
+    TextSize = 15,
+    Font = Enum.Font.GothamBold,
+}, main)
+corner(close)
+close.MouseButton1Click:Connect(function()
+    main.Visible = false
+end)
+
+-- Drag the menu
+local dragging, dragStart, startPos
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- Password screen
+local gate = make("Frame", {
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = DARK,
+    ZIndex = 5,
+}, main)
+corner(gate, 12)
+
+make("TextLabel", {
+    Size = UDim2.new(1, -30, 0, 55),
+    Position = UDim2.fromOffset(15, 30),
+    BackgroundTransparency = 1,
+    Text = "NOVA PREMIUM ACCESS",
+    TextColor3 = WHITE,
+    TextSize = 20,
+    Font = Enum.Font.GothamBold,
+    ZIndex = 6,
+}, gate)
+
+local password = make("premium", {
+    Size = UDim2.new(1, -70, 0, 42),
+    Position = UDim2.fromOffset(35, 105),
+    BackgroundColor3 = PANEL,
+    TextColor3 = WHITE,
+    PlaceholderText = "Enter your access key",
+    PlaceholderColor3 = Color3.fromRGB(160, 160, 175),
+    Text = "",
+    TextSize = 15,
+    Font = Enum.Font.Gotham,
+    ClearTextOnFocus = false,
+    ZIndex = 6,
+}, gate)
+corner(password)
+
+local unlock = make("TextButton", {
+    Size = UDim2.new(1, -70, 0, 42),
+    Position = UDim2.fromOffset(35, 160),
+    BackgroundColor3 = PURPLE,
+    Text = "UNLOCK MENU",
+    TextColor3 = WHITE,
+    TextSize = 15,
+    Font = Enum.Font.GothamBold,
+    ZIndex = 6,
+}, gate)
+corner(unlock)
+
+local status = make("TextLabel", {
+    Size = UDim2.new(1, -30, 0, 40),
+    Position = UDim2.fromOffset(15, 220),
+    BackgroundTransparency = 1,
+    Text = "Access required",
+    TextColor3 = Color3.fromRGB(190, 170, 255),
+    TextSize = 13,
+    Font = Enum.Font.Gotham,
+    ZIndex = 6,
+}, gate)
+
+-- Demo key only. NOT secure premium authentication.
+-- Replace with server-side validation before publishing.
+local DEMO_KEY = "NOVA-DEMO"
+
+-- Tabs and controls
+local nav = make("Frame", {
+    Position = UDim2.fromOffset(12, 58),
+    Size = UDim2.new(0, 125, 1, -70),
+    BackgroundColor3 = PANEL,
+}, main)
+corner(nav)
+
+local content = make("ScrollingFrame", {
+    Position = UDim2.fromOffset(147, 58),
+    Size = UDim2.new(1, -159, 1, -70),
+    BackgroundColor3 = PANEL,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 4,
+    CanvasSize = UDim2.fromOffset(0, 0),
+}, main)
+corner(content)
+
+local list = make("UIListLayout", {
+    Padding = UDim.new(0, 7),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, content)
+
+list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    content.CanvasSize = UDim2.fromOffset(
+        0, list.AbsoluteContentSize.Y + 12
+    )
+end)
+
+local function clearContent()
+    for _, child in ipairs(content:GetChildren()) do
+        if child:IsA("GuiObject") and child ~= list then
+            child:Destroy()
+        end
+    end
+end
+
+local function section(text)
+    make("TextLabel", {
+        Size = UDim2.new(1, -12, 0, 30),
+        BackgroundTransparency = 1,
+        Text = "  " .. text,
+        TextColor3 = Color3.fromRGB(190, 150, 255),
+        TextSize = 15,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, content)
+end
+
+local function toggle(label, key)
+    local button = make("TextButton", {
+        Size = UDim2.new(1, -12, 0, 34),
+        BackgroundColor3 = DARK,
+        Text = "",
+        AutoButtonColor = true,
+    }, content)
+    corner(button)
+
+    local text = make("TextLabel", {
+        Size = UDim2.new(1, -65, 1, 0),
+        Position = UDim2.fromOffset(10, 0),
+        BackgroundTransparency = 1,
+        Text = label,
+        TextColor3 = WHITE,
+        TextSize = 13,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, button)
+
+    local state = make("TextLabel", {
+        Size = UDim2.fromOffset(48, 25),
+        Position = UDim2.new(1, -54, 0.5, -12),
+        BackgroundColor3 = settings[key] and PURPLE or PANEL,
+        Text = settings[key] and "ON" or "OFF",
+        TextColor3 = WHITE,
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
+    }, button)
+    corner(state)
+
+    button.MouseButton1Click:Connect(function()
+        settings[key] = not settings[key]
+        state.Text = settings[key] and "ON" or "OFF"
+        state.BackgroundColor3 = settings[key] and PURPLE or PANEL
+    end)
+end
+
+local function slider(label, key, minValue, maxValue)
+    local frame = make("Frame", {
+        Size = UDim2.new(1, -12, 0, 62),
+        BackgroundColor3 = DARK,
+    }, content)
+    corner(frame)
+
+    local caption = make("TextLabel", {
+        Size = UDim2.new(1, -16, 0, 26),
+        Position = UDim2.fromOffset(8, 2),
+        BackgroundTransparency = 1,
+        TextColor3 = WHITE,
+        Text = label .. ": " .. tostring(settings[key]),
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, frame)
+
+    local bar = make("TextButton", {
+        Size = UDim2.new(1, -20, 0, 12),
+        Position = UDim2.fromOffset(10, 38),
+        BackgroundColor3 = PANEL,
+        Text = "",
+    }, frame)
+    corner(bar)
+
+    local fill = make("Frame", {
+        Size = UDim2.new(
+            (settings[key] - minValue) / (maxValue - minValue), 0, 1, 0
+        ),
+        BackgroundColor3 = PURPLE,
+        BorderSizePixel = 0,
+    }, bar)
+    corner(fill)
+
+    local function update(x)
+        local alpha = math.clamp(
+            (x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1
+        )
+        settings[key] = math.floor(
+            minValue + alpha * (maxValue - minValue)
+        )
+        fill.Size = UDim2.fromScale(alpha, 1)
+        caption.Text = label .. ": " .. settings[key]
+
+        if key == "UIScale" then
+            scale.Scale = settings.UIScale / 100
+        end
+    end
+
+    bar.MouseButton1Click:Connect(function()
+        update(UIS:GetMouseLocation().X)
+    end)
+end
+
+local function buildTab(tab)
+    clearContent()
+
+    if tab == "Aim" then
+        section("AIM TRAINING")
+        toggle("Show FOV", "ShowFOV")
+        toggle("Team Check", "TeamCheck")
+        slider("FOV Size", "FOVSize", 30, 300)
+        slider("Max Target Distance", "AimDistance", 50, 2000)
+
+    elseif tab == "Visuals" then
+        section("PLAYER VISUALS")
+        toggle("Highlight ESP", "Highlight")
+        toggle("Box ESP", "Boxes")
+        toggle("Corner Box", "CornerBox")
+        toggle("Skeleton ESP", "Skeleton")
+        toggle("Name Tags", "NameTags")
+        toggle("Health Bar", "HealthBar")
+        toggle("Distance ESP", "Distance")
+        toggle("Head Dot", "HeadDot")
+        toggle("Tracers", "Tracers")
+        slider("Max ESP Distance", "ESPDistance", 50, 2000)
+
+    elseif tab == "Weapons" then
+        section("OWN-GAME WEAPON TESTING")
+        toggle("Rapid Fire Test", "RapidFire")
+        slider("Rate of Fire", "FireRate", 1, 30)
+        slider("Test Damage Value", "Damage", 1, 100)
+
+    elseif tab == "Settings" then
+        section("INTERFACE")
+        slider("UI Scale (%)", "UIScale", 70, 150)
+    end
+end
+
+local tabs = {"Aim", "Visuals", "Weapons", "Settings"}
+
+for i, tab in ipairs(tabs) do
+    local button = make("TextButton", {
+        Size = UDim2.new(1, -12, 0, 38),
+        Position = UDim2.fromOffset(6, 8 + (i - 1) * 45),
+        BackgroundColor3 = DARK,
+        Text = tab,
+        TextColor3 = WHITE,
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+    }, nav)
+    corner(button)
+
+    button.MouseButton1Click:Connect(function()
+        buildTab(tab)
+    end)
+end
+
+-- FOV display
+local fovCircle = make("Frame", {
+    Name = "TrainingFOV",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(settings.FOVSize * 2, settings.FOVSize * 2),
+    BackgroundTransparency = 1,
+    Visible = false,
+}, gui)
+
+make("UICorner", {
+    CornerRadius = UDim.new(1, 0),
+}, fovCircle)
+
+make("UIStroke", {
+    Color = PURPLE,
+    Thickness = 1.5,
+}, fovCircle)
+
+RunService.RenderStepped:Connect(function()
+    fovCircle.Visible = settings.ShowFOV and main.Visible
+    fovCircle.Size = UDim2.fromOffset(
+        settings.FOVSize * 2, settings.FOVSize * 2
+    )
+end)
+
+unlock.MouseButton1Click:Connect(function()
+    if password.Text == DEMO_KEY then
+        gate.Visible = false
+        buildTab("Aim")
+    else
+        status.Text = "Invalid demo key. Try again."
+        status.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+buildTab("Aim")
+
+-- Press RightShift to hide/show the menu.
+UIS.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
+        main.Visible = not main.Visible
+    end
+end)
