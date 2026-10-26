@@ -1,595 +1,493 @@
+--========================================================
+-- PEEP | LIVE VISUALS + CONTROL CONNECTIONS
+-- Append to the end of your existing LocalScript.
+-- Intended for your own Roblox Studio experience.
+--========================================================
 
--- PEEP | Liquid Chrome UI
--- LocalScript -> StarterPlayer > StarterPlayerScripts
--- Keyless UI with shared settings for your own Roblox experience.
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
 
-local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+-- Actual UI scaling.
+local uiScale = Instance.new("UIScale")
+uiScale.Name = "PEEPScale"
+uiScale.Scale = 1
+uiScale.Parent = main
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+callbacks["UI Scale"] = function(value)
+    uiScale.Scale = math.clamp(value / 100, 0.7, 1.2)
+end
 
-local old = playerGui:FindFirstChild("PEEP")
-if old then old:Destroy() end
+-- The existing UI slider is expressed as 70–120.
+callbacks["Max ESP Distance"] = function(value)
+    state["Max ESP Distance"] = value
+end
 
-local Settings = {
-    Aimbot = false,
-    SilentAim = false,
-    Triggerbot = false,
-    HeadSelection = "Head",
-    MaxAimDistance = 500,
-    SkipADS = false,
-    SkipRoll = false,
-    ShowFOV = false,
-    FOVSize = 120,
-    TeamCheck = false,
+-- Dedicated overlay for screen-space visuals.
+local overlay = Instance.new("Frame")
+overlay.Name = "PEEPOverlay"
+overlay.Size = UDim2.fromScale(1, 1)
+overlay.BackgroundTransparency = 1
+overlay.BorderSizePixel = 0
+overlay.ZIndex = 30
+overlay.Parent = gui
 
-    HighlightESP = false,
-    BoxESP = false,
-    CornerBox = false,
-    SkeletonESP = false,
-    NameTags = false,
-    HealthBar = false,
-    DistanceESP = false,
-    HeadDot = false,
-    Tracers = false,
-    MaxESPDistance = 1000,
+-- FOV circle.
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.BackgroundTransparency = 1
+fovCircle.BorderSizePixel = 0
+fovCircle.Visible = false
+fovCircle.ZIndex = 31
+fovCircle.Parent = overlay
 
-    RapidFire = false,
-    RateOfFire = 10,
-    DamageChanger = false,
-    DamageValue = 25,
+local fovCorner = Instance.new("UICorner")
+fovCorner.CornerRadius = UDim.new(1, 0)
+fovCorner.Parent = fovCircle
 
-    UIScale = 1,
+local fovStroke = Instance.new("UIStroke")
+fovStroke.Color = C.accent
+fovStroke.Thickness = 1.5
+fovStroke.Transparency = 0.1
+fovStroke.Parent = fovCircle
+
+-- Utility to create a screen-space line.
+local function newLine(parent, name)
+    local line = Instance.new("Frame")
+    line.Name = name
+    line.AnchorPoint = Vector2.new(0, 0.5)
+    line.Size = UDim2.fromOffset(0, 2)
+    line.BackgroundColor3 = C.accent
+    line.BorderSizePixel = 0
+    line.Visible = false
+    line.ZIndex = 35
+    line.Parent = parent
+    return line
+end
+
+local function drawLine(line, x1, y1, x2, y2, thickness)
+    local dx, dy = x2 - x1, y2 - y1
+    line.Position = UDim2.fromOffset(x1, y1)
+    line.Size = UDim2.fromOffset(
+        math.sqrt(dx * dx + dy * dy),
+        thickness or 2
+    )
+    line.Rotation = math.deg(math.atan2(dy, dx))
+    line.Visible = true
+end
+
+local function hideLine(line)
+    line.Visible = false
+end
+
+local esp = {}
+
+local function makeESP(target)
+    if target == player or esp[target] then
+        return
+    end
+
+    local folder = Instance.new("Folder")
+    folder.Name = "PEEP_" .. target.UserId
+    folder.Parent = overlay
+
+    local box = Instance.new("Frame")
+    box.Name = "Box"
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 0
+    box.Visible = false
+    box.ZIndex = 32
+    box.Parent = folder
+
+    local boxStroke = Instance.new("UIStroke")
+    boxStroke.Color = C.accent
+    boxStroke.Thickness = 1.5
+    boxStroke.Parent = box
+
+    local cornerLines = {}
+    for i = 1, 8 do
+        cornerLines[i] = newLine(folder, "Corner" .. i)
+    end
+
+    local tracer = newLine(folder, "Tracer")
+
+    local headDot = Instance.new("Frame")
+    headDot.Name = "HeadDot"
+    headDot.Size = UDim2.fromOffset(7, 7)
+    headDot.BackgroundColor3 = C.silver
+    headDot.BorderSizePixel = 0
+    headDot.Visible = false
+    headDot.ZIndex = 37
+    headDot.Parent = folder
+
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    dotCorner.Parent = headDot
+
+    local tag = Instance.new("TextLabel")
+    tag.Name = "PlayerTag"
+    tag.Size = UDim2.fromOffset(220, 20)
+    tag.BackgroundTransparency = 1
+    tag.Font = Enum.Font.GothamBold
+    tag.TextSize = 11
+    tag.TextColor3 = C.silver
+    tag.TextStrokeTransparency = 0.25
+    tag.TextXAlignment = Enum.TextXAlignment.Center
+    tag.Visible = false
+    tag.ZIndex = 37
+    tag.Parent = folder
+
+    local healthBack = Instance.new("Frame")
+    healthBack.Name = "HealthBackground"
+    healthBack.BackgroundColor3 = C.track
+    healthBack.BorderSizePixel = 0
+    healthBack.Visible = false
+    healthBack.ZIndex = 36
+    healthBack.Parent = folder
+
+    local healthFill = Instance.new("Frame")
+    healthFill.Name = "HealthFill"
+    healthFill.AnchorPoint = Vector2.new(0, 1)
+    healthFill.Position = UDim2.new(0, 0, 1, 0)
+    healthFill.Size = UDim2.fromScale(1, 1)
+    healthFill.BackgroundColor3 = Color3.fromRGB(100, 230, 150)
+    healthFill.BorderSizePixel = 0
+    healthFill.ZIndex = 37
+    healthFill.Parent = healthBack
+
+    local skeletonLines = {}
+    for i = 1, 12 do
+        skeletonLines[i] = newLine(folder, "Skeleton" .. i)
+    end
+
+    local highlight
+
+    esp[target] = {
+        folder = folder,
+        box = box,
+        cornerLines = cornerLines,
+        tracer = tracer,
+        headDot = headDot,
+        tag = tag,
+        healthBack = healthBack,
+        healthFill = healthFill,
+        skeletonLines = skeletonLines,
+        highlight = highlight,
+    }
+end
+
+local function hideESP(v)
+    v.box.Visible = false
+    v.tracer.Visible = false
+    v.headDot.Visible = false
+    v.tag.Visible = false
+    v.healthBack.Visible = false
+
+    for _, line in ipairs(v.cornerLines) do
+        hideLine(line)
+    end
+    for _, line in ipairs(v.skeletonLines) do
+        hideLine(line)
+    end
+
+    if v.highlight then
+        v.highlight.Enabled = false
+    end
+end
+
+local function screenPoint(part)
+    if not Camera or not part then
+        return nil
+    end
+
+    local p, onScreen = Camera:WorldToViewportPoint(part.Position)
+    if not onScreen or p.Z <= 0 then
+        return nil
+    end
+
+    return Vector2.new(p.X, p.Y)
+end
+
+local skeletonPairsR15 = {
+    {"Head", "UpperTorso"},
+    {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"},
+    {"LeftUpperArm", "LeftLowerArm"},
+    {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"},
+    {"RightUpperArm", "RightLowerArm"},
+    {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"},
+    {"LeftUpperLeg", "LeftLowerLeg"},
+    {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"},
 }
 
-local C = {
-    bg = Color3.fromRGB(13, 15, 20),
-    panel = Color3.fromRGB(21, 24, 31),
-    panel2 = Color3.fromRGB(30, 34, 43),
-    white = Color3.fromRGB(238, 242, 250),
-    muted = Color3.fromRGB(139, 148, 164),
-    accent = Color3.fromRGB(157, 208, 255),
-    accent2 = Color3.fromRGB(104, 155, 210),
-    stroke = Color3.fromRGB(66, 76, 92),
-    green = Color3.fromRGB(125, 235, 180),
+local skeletonPairsR6 = {
+    {"Head", "Torso"},
+    {"Torso", "Left Arm"},
+    {"Torso", "Right Arm"},
+    {"Torso", "Left Leg"},
+    {"Torso", "Right Leg"},
 }
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "PEEP"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
+local function updateSkeleton(v, character)
+    local pairsToDraw = character:FindFirstChild("UpperTorso")
+        and skeletonPairsR15 or skeletonPairsR6
 
-local scale = Instance.new("UIScale")
-scale.Scale = Settings.UIScale
-scale.Parent = gui
+    for i, pair in ipairs(pairsToDraw) do
+        local a = character:FindFirstChild(pair[1])
+        local b = character:FindFirstChild(pair[2])
+        local p1 = a and screenPoint(a)
+        local p2 = b and screenPoint(b)
+        local line = v.skeletonLines[i]
 
-local function make(class, props, parent)
-    local obj = Instance.new(class)
-    for k, v in pairs(props or {}) do
-        obj[k] = v
-    end
-    obj.Parent = parent
-    return obj
-end
-
-local function corner(obj, radius)
-    make("UICorner", {CornerRadius = UDim.new(0, radius or 8)}, obj)
-end
-
-local function outline(obj, color, transparency)
-    make("UIStroke", {
-        Color = color or C.stroke,
-        Transparency = transparency or 0,
-        Thickness = 1,
-    }, obj)
-end
-
-local function tween(obj, props, duration)
-    TweenService:Create(
-        obj,
-        TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        props
-    ):Play()
-end
-
-local main = make("Frame", {
-    Name = "Main",
-    Size = UDim2.fromOffset(620, 480),
-    Position = UDim2.new(0.5, -310, 0.5, -240),
-    BackgroundColor3 = C.bg,
-    BorderSizePixel = 0,
-}, gui)
-corner(main, 14)
-outline(main, C.stroke)
-
-make("UIGradient", {
-    Rotation = 35,
-    Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(33, 39, 51)),
-        ColorSequenceKeypoint.new(0.45, C.bg),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(23, 29, 39)),
-    }),
-}, main)
-
-local top = make("Frame", {
-    Name = "Topbar",
-    Size = UDim2.new(1, 0, 0, 64),
-    BackgroundColor3 = Color3.fromRGB(25, 29, 38),
-    BorderSizePixel = 0,
-}, main)
-corner(top, 14)
-
-make("Frame", {
-    Position = UDim2.new(0, 0, 1, -14),
-    Size = UDim2.new(1, 0, 0, 14),
-    BackgroundColor3 = Color3.fromRGB(25, 29, 38),
-    BorderSizePixel = 0,
-}, top)
-
-local logo = make("TextLabel", {
-    Position = UDim2.fromOffset(20, 9),
-    Size = UDim2.fromOffset(150, 29),
-    BackgroundTransparency = 1,
-    Text = "P E E P",
-    Font = Enum.Font.GothamBlack,
-    TextSize = 23,
-    TextColor3 = C.white,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, top)
-
-make("TextLabel", {
-    Position = UDim2.fromOffset(21, 37),
-    Size = UDim2.fromOffset(220, 15),
-    BackgroundTransparency = 1,
-    Text = "LIQUID CHROME  /  CONTROL PANEL",
-    Font = Enum.Font.GothamMedium,
-    TextSize = 9,
-    TextColor3 = C.muted,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, top)
-
-local status = make("TextLabel", {
-    AnchorPoint = Vector2.new(1, 0.5),
-    Position = UDim2.new(1, -54, 0.5, 0),
-    Size = UDim2.fromOffset(100, 25),
-    BackgroundColor3 = Color3.fromRGB(31, 53, 48),
-    Text = "●  READY",
-    Font = Enum.Font.GothamBold,
-    TextSize = 10,
-    TextColor3 = C.green,
-}, top)
-corner(status, 7)
-
-local close = make("TextButton", {
-    AnchorPoint = Vector2.new(1, 0.5),
-    Position = UDim2.new(1, -14, 0.5, 0),
-    Size = UDim2.fromOffset(27, 27),
-    BackgroundColor3 = Color3.fromRGB(54, 39, 44),
-    Text = "×",
-    Font = Enum.Font.GothamMedium,
-    TextSize = 20,
-    TextColor3 = Color3.fromRGB(255, 153, 165),
-    AutoButtonColor = false,
-}, top)
-corner(close, 8)
-close.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
-
-local sidebar = make("Frame", {
-    Position = UDim2.fromOffset(12, 76),
-    Size = UDim2.new(0, 158, 1, -90),
-    BackgroundColor3 = Color3.fromRGB(17, 20, 27),
-    BorderSizePixel = 0,
-}, main)
-corner(sidebar, 10)
-outline(sidebar, Color3.fromRGB(43, 49, 61))
-
-make("TextLabel", {
-    Position = UDim2.fromOffset(13, 12),
-    Size = UDim2.new(1, -26, 0, 18),
-    BackgroundTransparency = 1,
-    Text = "NAVIGATION",
-    Font = Enum.Font.GothamBold,
-    TextSize = 9,
-    TextColor3 = C.muted,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, sidebar)
-
-local nav = make("Frame", {
-    Position = UDim2.fromOffset(8, 38),
-    Size = UDim2.new(1, -16, 1, -46),
-    BackgroundTransparency = 1,
-}, sidebar)
-make("UIListLayout", {
-    Padding = UDim.new(0, 7),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, nav)
-
-local content = make("ScrollingFrame", {
-    Position = UDim2.fromOffset(182, 78),
-    Size = UDim2.new(1, -194, 1, -92),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = C.accent2,
-    CanvasSize = UDim2.new(),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-}, main)
-
-make("UIPadding", {
-    PaddingRight = UDim.new(0, 8),
-    PaddingBottom = UDim.new(0, 10),
-}, content)
-
-make("UIListLayout", {
-    Padding = UDim.new(0, 9),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, content)
-
-local tabs = {}
-local activeTab = "AIMBOT"
-
-local function refreshTab()
-    for name, button in pairs(tabs) do
-        local selected = name == activeTab
-        tween(button, {
-            BackgroundColor3 = selected and C.panel2 or Color3.fromRGB(17, 20, 27),
-            TextColor3 = selected and C.white or C.muted,
-        })
-    end
-
-    for _, child in ipairs(content:GetChildren()) do
-        if child:IsA("GuiObject") and not child:IsA("UIListLayout")
-            and not child:IsA("UIPadding") then
-            child:Destroy()
-        end
-    end
-end
-
-local function section(text)
-    local label = make("TextLabel", {
-        Size = UDim2.new(1, -4, 0, 25),
-        BackgroundTransparency = 1,
-        Text = string.upper(text),
-        Font = Enum.Font.GothamBold,
-        TextSize = 11,
-        TextColor3 = C.accent,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, content)
-    return label
-end
-
-local function toggle(label, key, description)
-    local row = make("Frame", {
-        Size = UDim2.new(1, -4, 0, description and 56 or 44),
-        BackgroundColor3 = C.panel,
-        BorderSizePixel = 0,
-    }, content)
-    corner(row, 9)
-    outline(row, Color3.fromRGB(43, 49, 61), 0.2)
-
-    make("TextLabel", {
-        Position = UDim2.fromOffset(12, description and 8 or 0),
-        Size = UDim2.new(1, -75, 0, description and 20 or 44),
-        BackgroundTransparency = 1,
-        Text = label,
-        Font = Enum.Font.GothamSemibold,
-        TextSize = 12,
-        TextColor3 = C.white,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, row)
-
-    if description then
-        make("TextLabel", {
-            Position = UDim2.fromOffset(12, 29),
-            Size = UDim2.new(1, -75, 0, 17),
-            BackgroundTransparency = 1,
-            Text = description,
-            Font = Enum.Font.Gotham,
-            TextSize = 9,
-            TextColor3 = C.muted,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-        }, row)
-    end
-
-    local switch = make("TextButton", {
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -12, 0.5, 0),
-        Size = UDim2.fromOffset(38, 21),
-        BackgroundColor3 = Settings[key] and C.accent2 or C.panel2,
-        Text = "",
-        AutoButtonColor = false,
-    }, row)
-    corner(switch, 12)
-
-    local knob = make("Frame", {
-        Position = Settings[key] and UDim2.new(1, -18, 0.5, -7)
-            or UDim2.new(0, 4, 0.5, -7),
-        Size = UDim2.fromOffset(14, 14),
-        BackgroundColor3 = C.white,
-        BorderSizePixel = 0,
-    }, switch)
-    corner(knob, 10)
-
-    local function update(value)
-        Settings[key] = value
-        tween(switch, {
-            BackgroundColor3 = value and C.accent2 or C.panel2,
-        })
-        tween(knob, {
-            Position = value and UDim2.new(1, -18, 0.5, -7)
-                or UDim2.new(0, 4, 0.5, -7),
-        })
-    end
-
-    switch.MouseButton1Click:Connect(function()
-        update(not Settings[key])
-    end)
-    row.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            if input.Position.X < switch.AbsolutePosition.X then
-                update(not Settings[key])
-            end
-        end
-    end)
-end
-
-local function slider(label, key, minValue, maxValue, decimals)
-    local row = make("Frame", {
-        Size = UDim2.new(1, -4, 0, 64),
-        BackgroundColor3 = C.panel,
-        BorderSizePixel = 0,
-    }, content)
-    corner(row, 9)
-    outline(row, Color3.fromRGB(43, 49, 61), 0.2)
-
-    make("TextLabel", {
-        Position = UDim2.fromOffset(12, 8),
-        Size = UDim2.new(1, -85, 0, 20),
-        BackgroundTransparency = 1,
-        Text = label,
-        Font = Enum.Font.GothamSemibold,
-        TextSize = 12,
-        TextColor3 = C.white,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, row)
-
-    local valueLabel = make("TextLabel", {
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -12, 0, 8),
-        Size = UDim2.fromOffset(70, 20),
-        BackgroundTransparency = 1,
-        Text = tostring(Settings[key]),
-        Font = Enum.Font.GothamBold,
-        TextSize = 11,
-        TextColor3 = C.accent,
-        TextXAlignment = Enum.TextXAlignment.Right,
-    }, row)
-
-    local track = make("TextButton", {
-        Position = UDim2.new(0, 12, 0, 39),
-        Size = UDim2.new(1, -24, 0, 6),
-        BackgroundColor3 = C.panel2,
-        Text = "",
-        AutoButtonColor = false,
-    }, row)
-    corner(track, 6)
-
-    local initial = math.clamp((Settings[key] - minValue) / (maxValue - minValue), 0, 1)
-    local fill = make("Frame", {
-        Size = UDim2.new(initial, 0, 1, 0),
-        BackgroundColor3 = C.accent2,
-        BorderSizePixel = 0,
-    }, track)
-    corner(fill, 6)
-
-    local dragging = false
-    local function setFromX(x)
-        local width = math.max(track.AbsoluteSize.X, 1)
-        local alpha = math.clamp((x - track.AbsolutePosition.X) / width, 0, 1)
-        local value = minValue + (maxValue - minValue) * alpha
-        if decimals == 0 then
-            value = math.floor(value + 0.5)
-        elseif decimals then
-            local mult = 10 ^ decimals
-            value = math.floor(value * mult + 0.5) / mult
-        end
-        Settings[key] = value
-        valueLabel.Text = tostring(value)
-        fill.Size = UDim2.new(alpha, 0, 1, 0)
-
-        if key == "UIScale" then
-            scale.Scale = value
+        if p1 and p2 then
+            drawLine(line, p1.X, p1.Y, p2.X, p2.Y, 2)
+        else
+            hideLine(line)
         end
     end
 
-    track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            setFromX(input.Position.X)
-        end
-    end)
-
-    UIS.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch) then
-            setFromX(input.Position.X)
-        end
-    end)
-
-    UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
+    for i = #pairsToDraw + 1, #v.skeletonLines do
+        hideLine(v.skeletonLines[i])
+    end
 end
 
-local function dropdown(label, key, options)
-    local row = make("Frame", {
-        Size = UDim2.new(1, -4, 0, 54),
-        BackgroundColor3 = C.panel,
-        BorderSizePixel = 0,
-    }, content)
-    corner(row, 9)
-    outline(row, Color3.fromRGB(43, 49, 61), 0.2)
+local function updateESP(target, v)
+    local character = target.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local head = character and character:FindFirstChild("Head")
 
-    make("TextLabel", {
-        Position = UDim2.fromOffset(12, 0),
-        Size = UDim2.new(0.45, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = label,
-        Font = Enum.Font.GothamSemibold,
-        TextSize = 12,
-        TextColor3 = C.white,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, row)
-
-    local button = make("TextButton", {
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.new(0.48, 0, 0, 32),
-        BackgroundColor3 = C.panel2,
-        Text = tostring(Settings[key]) .. "  ▾",
-        Font = Enum.Font.GothamMedium,
-        TextSize = 11,
-        TextColor3 = C.accent,
-        AutoButtonColor = false,
-    }, row)
-    corner(button, 7)
-
-    local index = table.find(options, Settings[key]) or 1
-    button.MouseButton1Click:Connect(function()
-        index = index % #options + 1
-        Settings[key] = options[index]
-        button.Text = tostring(Settings[key]) .. "  ▾"
-    end)
-end
-
-local function buildTab(name)
-    refreshTab()
-    activeTab = name
-
-    if name == "AIMBOT" then
-        section("Targeting controls")
-        toggle("Aimbot", "Aimbot", "Setting for your own game's targeting system")
-        toggle("Silent Aim", "SilentAim")
-        toggle("Triggerbot", "Triggerbot")
-        dropdown("Hitbox selection", "HeadSelection", {"Head", "Torso", "HumanoidRootPart"})
-        slider("Maximum aim distance", "MaxAimDistance", 50, 2000, 0)
-        toggle("Skip ADS", "SkipADS")
-        toggle("Skip Roll", "SkipRoll")
-        toggle("Show FOV", "ShowFOV")
-        slider("FOV size", "FOVSize", 20, 500, 0)
-        toggle("Team check", "TeamCheck", "Useful for team-aware game mechanics")
-
-    elseif name == "VISUALS" then
-        section("Visual options")
-        toggle("Highlight ESP", "HighlightESP")
-        toggle("Box ESP", "BoxESP")
-        toggle("Corner Box", "CornerBox")
-        toggle("Skeleton ESP", "SkeletonESP")
-        toggle("Name Tags", "NameTags")
-        toggle("Health Bar", "HealthBar")
-        toggle("Distance ESP", "DistanceESP")
-        toggle("Head Dot", "HeadDot")
-        toggle("Tracers", "Tracers")
-        slider("Maximum visual distance", "MaxESPDistance", 50, 3000, 0)
-
-    elseif name == "EXPLOITS" then
-        section("Weapon tuning")
-        toggle("Rapid Fire", "RapidFire", "Configure only in your own game")
-        slider("Rate of fire", "RateOfFire", 1, 60, 0)
-        toggle("Damage changer", "DamageChanger", "Use server-validated weapon settings")
-        slider("Damage value", "DamageValue", 1, 500, 0)
-
-    elseif name == "SETTINGS" then
-        section("Interface")
-        slider("UI scale", "UIScale", 0.7, 1.3, 2)
-
-        local info = make("TextLabel", {
-            Size = UDim2.new(1, -4, 0, 70),
-            BackgroundColor3 = C.panel,
-            Text = "PEEP  •  KEYLESS\nSettings are stored locally while this UI runs.\nConnect the settings to your own game systems.",
-            Font = Enum.Font.Gotham,
-            TextSize = 11,
-            TextColor3 = C.muted,
-            TextWrapped = true,
-        }, content)
-        corner(info, 9)
+    if not Camera or not character or not humanoid
+        or humanoid.Health <= 0 or not root then
+        hideESP(v)
+        return
     end
 
-    content.CanvasPosition = Vector2.zero
-end
-
-for i, name in ipairs({"AIMBOT", "VISUALS", "EXPLOITS", "SETTINGS"}) do
-    local button = make("TextButton", {
-        Name = name,
-        Size = UDim2.new(1, 0, 0, 39),
-        BackgroundColor3 = C.panel2,
-        Text = "   " .. name,
-        Font = Enum.Font.GothamBold,
-        TextSize = 11,
-        TextColor3 = C.muted,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        LayoutOrder = i,
-        AutoButtonColor = false,
-    }, nav)
-    corner(button, 8)
-    tabs[name] = button
-    button.MouseButton1Click:Connect(function()
-        buildTab(name)
-    end)
-end
-
--- Drag the window using the top bar.
-local dragging = false
-local dragStart, startPos
-
-top.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = main.Position
+    if state["Team Check"] and target.Team == player.Team then
+        hideESP(v)
+        return
     end
-end)
 
-UIS.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        main.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    local distance = (root.Position - Camera.CFrame.Position).Magnitude
+    if distance > (state["Max ESP Distance"] or 500) then
+        hideESP(v)
+        return
+    end
+
+    local rootPos = screenPoint(root)
+    local headPos = head and screenPoint(head)
+
+    if not rootPos then
+        hideESP(v)
+        return
+    end
+
+    -- Highlight ESP.
+    if state["Highlight ESP"] then
+        if not v.highlight or not v.highlight.Parent then
+            local h = Instance.new("Highlight")
+            h.Name = "PEEP_Highlight"
+            h.FillColor = C.accent
+            h.OutlineColor = C.silver
+            h.FillTransparency = 0.8
+            h.OutlineTransparency = 0.15
+            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            h.Parent = character
+            v.highlight = h
+        end
+        v.highlight.Enabled = true
+    elseif v.highlight then
+        v.highlight.Enabled = false
+    end
+
+    -- Approximate screen-space player bounds.
+    local _, bounds = character:GetBoundingBox()
+    local height = math.clamp(
+        bounds.Y * Camera.ViewportSize.Y / math.max(distance * 1.5, 1),
+        12,
+        Camera.ViewportSize.Y
+    )
+    local width = height * 0.48
+    local left = rootPos.X - width / 2
+    local top = rootPos.Y - height / 2
+
+    -- Box ESP.
+    v.box.Visible = state["Box ESP"] and not state["Corner Box"]
+    if v.box.Visible then
+        v.box.Position = UDim2.fromOffset(left, top)
+        v.box.Size = UDim2.fromOffset(width, height)
+    end
+
+    -- Corner Box.
+    for _, line in ipairs(v.cornerLines) do
+        hideLine(line)
+    end
+
+    if state["Corner Box"] then
+        local cw, ch = width * 0.28, height * 0.2
+        local segments = {
+            {left, top, left + cw, top},
+            {left, top, left, top + ch},
+            {left + width - cw, top, left + width, top},
+            {left + width, top, left + width, top + ch},
+            {left, top + height - ch, left, top + height},
+            {left, top + height, left + cw, top + height},
+            {left + width - cw, top + height, left + width, top + height},
+            {left + width, top + height - ch, left + width, top + height},
+        }
+
+        for i, s in ipairs(segments) do
+            drawLine(v.cornerLines[i], s[1], s[2], s[3], s[4], 2)
+        end
+    end
+
+    -- Name tags and distance.
+    v.tag.Visible = state["Name Tags"] or state["Distance"]
+    if v.tag.Visible then
+        local textParts = {}
+        if state["Name Tags"] then
+            table.insert(textParts, target.DisplayName)
+        end
+        if state["Distance"] then
+            table.insert(textParts, string.format("%d studs", distance))
+        end
+        v.tag.Text = table.concat(textParts, "  |  ")
+        v.tag.Position = UDim2.fromOffset(rootPos.X - 110, top - 21)
+    end
+
+    -- Health bar beside the player.
+    v.healthBack.Visible = state["Health Bar (Side)"]
+    if v.healthBack.Visible then
+        v.healthBack.Position = UDim2.fromOffset(left - 7, top)
+        v.healthBack.Size = UDim2.fromOffset(4, height)
+
+        local ratio = math.clamp(
+            humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1
+        )
+        v.healthFill.Size = UDim2.new(1, 0, ratio, 0)
+        v.healthFill.BackgroundColor3 = Color3.fromRGB(
+            math.floor(255 * (1 - ratio)),
+            math.floor(220 * ratio),
+            80
         )
     end
-end)
 
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
+    -- Head Dot.
+    v.headDot.Visible = state["Head Dot"] and headPos ~= nil
+    if v.headDot.Visible then
+        v.headDot.Position = UDim2.fromOffset(headPos.X - 3.5, headPos.Y - 3.5)
+    end
+
+    -- Tracers.
+    v.tracer.Visible = state["Tracers"]
+    if v.tracer.Visible then
+        local viewport = Camera.ViewportSize
+        drawLine(
+            v.tracer,
+            viewport.X / 2,
+            viewport.Y,
+            rootPos.X,
+            rootPos.Y,
+            2
+        )
+    end
+
+    -- Skeleton ESP.
+    if state["Skeleton ESP"] then
+        updateSkeleton(v, character)
+    else
+        for _, line in ipairs(v.skeletonLines) do
+            hideLine(line)
+        end
+    end
+end
+
+-- Connect existing FOV settings.
+callbacks["Show FOV"] = function(enabled)
+    fovCircle.Visible = enabled
+end
+
+callbacks["FOV Size"] = function(value)
+    state["FOV Size"] = value
+end
+
+-- Create visual objects for current and future players.
+for _, target in ipairs(Players:GetPlayers()) do
+    makeESP(target)
+end
+
+Players.PlayerAdded:Connect(makeESP)
+
+Players.PlayerRemoving:Connect(function(target)
+    local v = esp[target]
+    if v then
+        if v.highlight then
+            v.highlight:Destroy()
+        end
+        v.folder:Destroy()
+        esp[target] = nil
     end
 end)
 
--- RightShift hides/shows the panel.
-UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
-        main.Visible = not main.Visible
+-- Live update loop.
+local visualConnection
+visualConnection = RunService.RenderStepped:Connect(function()
+    if not gui.Parent then
+        visualConnection:Disconnect()
+        return
+    end
+
+    Camera = workspace.CurrentCamera
+
+    if state["Show FOV"] and Camera then
+        fovCircle.Visible = true
+        local mouse = UIS:GetMouseLocation()
+        local radius = state["FOV Size"] or 400
+
+        fovCircle.Position = UDim2.fromOffset(mouse.X, mouse.Y)
+        fovCircle.Size = UDim2.fromOffset(radius * 2, radius * 2)
+    else
+        fovCircle.Visible = false
+    end
+
+    for target, v in pairs(esp) do
+        if target.Parent == Players then
+            updateESP(target, v)
+        else
+            hideESP(v)
+        end
     end
 end)
 
-buildTab("AIMBOT")
+-- Make the reopen button draggable and keep it available on mobile.
+reopen.Active = true
+reopen.Draggable = true
 
--- Access Settings from other code in this same LocalScript.
--- Example: print(Settings.MaxAimDistance)
--- For a larger project, move shared settings into a ModuleScript.
+-- Fix the original close button: hide instead of destroying the whole UI.
+-- Disconnect its original action is not possible, so this replacement
+-- uses a separate hide button behavior when the UI is reopened.
+-- The existing close callback should be changed to:
+-- main.Visible = false
+-- reopen.Visible = true
+
+-- Ensure the window can be reopened using RightShift or the P button.
+reopen.MouseButton1Click:Connect(function()
+    main.Visible = true
+    reopen.Visible = false
+end)
+
+gui.Destroying:Connect(function()
+    if visualConnection then
+        visualConnection:Disconnect()
+    end
+    for _, v in pairs(esp) do
+        if v.highlight then
+            v.highlight:Destroy()
+        end
+    end
+end)
+
+print("PEEP live visuals connected")
